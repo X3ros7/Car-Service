@@ -1,9 +1,17 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UserService } from 'src/user/user.service';
 import { LoginDto, RefreshTokenDto } from './dto/login.dto';
 import { User } from 'src/entities/user.entity';
 import { JwtService } from '@nestjs/jwt';
 import { DateTime } from 'luxon';
+import { RegisterDto } from './dto/register.dto';
+import { compare } from 'bcrypt';
+import { IAuthResult } from './interfaces/auth.interface';
 
 @Injectable()
 export class AuthService {
@@ -19,7 +27,7 @@ export class AuthService {
       this.logger.error(`User with email ${loginDto.email} not found`);
       throw new UnauthorizedException(`User not found`);
     }
-    if (user.password !== loginDto.password) {
+    if (!(await compare(loginDto.password, user.password))) {
       this.logger.error(
         `Invalid password for user with email ${loginDto.email}`,
       );
@@ -27,11 +35,24 @@ export class AuthService {
     }
     const tokens = await this.generateTokens(user);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...userData } = user;
-
     this.logger.log(`User with email ${loginDto.email} logged in`);
     return await this.getAuthResult(user, tokens);
+  }
+
+  async register(dto: RegisterDto) {
+    const user = await this.userService.findByEmail(dto.email);
+    if (user) {
+      this.logger.error(`User with email ${dto.email} already exists`);
+      throw new BadRequestException('User already exists');
+    }
+
+    const newUser = await this.userService.create(dto);
+    const tokens = await this.generateTokens(newUser);
+
+    this.logger.log(
+      `User with email ${newUser.email} was successfully registered to app`,
+    );
+    return await this.getAuthResult(newUser, tokens);
   }
 
   async refreshToken(dto: RefreshTokenDto) {
@@ -54,6 +75,7 @@ export class AuthService {
 
     const user = await this.userService.findById(id);
     if (!user) {
+      this.logger.error(`User with id ${id} not found`);
       throw new UnauthorizedException('User not found');
     }
 
@@ -77,7 +99,7 @@ export class AuthService {
   private async getAuthResult(
     user: User,
     tokens: { token: string; refreshToken: string },
-  ) {
+  ): Promise<IAuthResult> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...userData } = user;
     return {

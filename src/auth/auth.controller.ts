@@ -1,17 +1,9 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Req,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Post, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto, RefreshTokenDto } from './dto/login.dto';
 import { Response } from 'express';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from 'src/common/guards/jwt.guard';
+import { ApiTags } from '@nestjs/swagger';
+import { RegisterDto } from './dto/register.dto';
 
 @Controller({
   version: '1',
@@ -59,10 +51,22 @@ export class AuthController {
     return resultWithoutRefresh;
   }
 
-  // @UseGuards(JwtAuthGuard)
-  // @Get('me')
-  // @ApiBearerAuth()
-  // async me(@Req() req) {
-  //   return req.user;
-  // }
+  @Post('register')
+  async register(
+    @Body() registerDto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.register(registerDto);
+
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      maxAge: 1000 * 60 * 60 * 24 * 30,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { refreshToken, ...resultWithoutRefresh } = result;
+    return resultWithoutRefresh;
+  }
 }
